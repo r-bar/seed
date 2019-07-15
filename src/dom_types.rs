@@ -9,6 +9,7 @@ use core::convert::AsRef;
 use indexmap::IndexMap;
 use pulldown_cmark;
 use std::{borrow::Cow, fmt};
+use std::collections::HashSet;
 use web_sys;
 
 pub trait MessageMapper<Ms, OtherMs> {
@@ -1146,6 +1147,55 @@ pub fn will_unmount<Ms>(mut actions: impl FnMut(&web_sys::Node) + 'static) -> Wi
     WillUnmount {
         actions: Box::new(closure),
         message: None,
+    }
+}
+
+impl<T> Into<String> for Node<T> {
+    fn into(self) -> String {
+        let el = match self {
+            Node::Text(text) => return String::from(text.text),
+            Node::Empty => return String::new(),
+            Node::Element(el) => el,
+        };
+        let mut output = String::new();
+        let tag = String::from(el.tag.as_str());
+        let opening = format!("<{}", &tag);
+        output.push_str(&opening);
+        if !el.attrs.vals.is_empty() {
+            output.push(' ');
+            output.push_str(&el.attrs.to_string());
+        }
+        output.push('>');
+
+        // Do not return children or a closing tag for void elements
+        // https://html.spec.whatwg.org/multipage/syntax.html#void-elements
+        let void_tags: HashSet<_> = [
+            String::from("area"),
+            String::from("base"),
+            String::from("br"),
+            String::from("col"),
+            String::from("embed"),
+            String::from("hr"),
+            String::from("img"),
+            String::from("input"),
+            String::from("link"),
+            String::from("meta"),
+            String::from("param"),
+            String::from("source"),
+            String::from("track"),
+            String::from("wrb"),
+        ].iter().cloned().collect();
+        if void_tags.contains(&tag) {
+            return output;
+        }
+
+        for child in el.children {
+            let child_string: String = child.into();
+            output.push_str(&child_string);
+        }
+        output.push_str(&format!("</{}>", &tag));
+        output
+
     }
 }
 
